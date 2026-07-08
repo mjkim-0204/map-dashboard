@@ -189,23 +189,23 @@ function switchTab(name){document.querySelectorAll('.tab-btn').forEach((b,i)=>{b
 // Target demand
 function onRatioChange(){updateTargetDemand();}
 function onBonusChange(){recalcAll();}
-function updateTargetDemand(){const gt=calcGT();const bgEl=document.getElementById('d_bg');if(bgEl)bgEl.textContent=gt.toLocaleString();
+function updateTargetDemand(){const gtRaw=calcGTraw();const bgEl=document.getElementById('d_bg');if(bgEl)bgEl.textContent=gtRaw.toLocaleString();
   const ids=['d_m20','d_m30','d_f20','d_f30'];let sum=0;ids.forEach(id=>{const el=document.getElementById(id);if(el)sum+=parseFloat(el.value)||0;});
   const rEl=document.getElementById('d_ratio');if(rEl)rEl.textContent=sum.toFixed(1)+'%';
   const tEl=document.getElementById('d_total');if(tEl)tEl.textContent=sum.toFixed(1)+'%';
-  const tv=Math.round(gt*sum/100);const tvEl=document.getElementById('d_target');
+  const rawTarget=Math.round(gtRaw*sum/100);
+  const isUniv=document.getElementById('chk-univ')?.checked;
+  const finalTarget=isUniv?Math.round(rawTarget*1.43):rawTarget;
+  const tvEl=document.getElementById('d_target');
   if(tvEl){
-    const isUniv=document.getElementById('chk-univ')?.checked;
-    if(isUniv&&tv>0){const raw=Math.round(calcGTraw()*sum/100);tvEl.textContent=raw.toLocaleString()+'*1.43\n='+tv.toLocaleString()+'명';}
-    else tvEl.textContent=tv>0?tv.toLocaleString()+'명':'0명';}
+    if(isUniv&&finalTarget>0){tvEl.textContent=rawTarget.toLocaleString()+'*1.43\n='+finalTarget.toLocaleString()+'명';}
+    else tvEl.textContent=finalTarget>0?finalTarget.toLocaleString()+'명':'0명';}
   updateSales();}
-// calcGT without univ bonus (for showing calculation)
+// calcGT without univ bonus
 function calcGTraw(){if(!state.gridCenter)return 0;const cB=document.getElementById('chk-comp')?.checked?0.5:1;let t=0;
   for(let i=0;i<16;i++){const s=state.cellStats[i],ou=getOU(i),sl=document.getElementById('chk-slope-'+i)?.checked?0.5:1;
     if(s.mainPct>0)t+=ou*(s.mainPct/100)*1*sl*cB;if(s.subPct>0)t+=ou*(s.subPct/100)*0.5*sl*cB;}return Math.round(t);}
-function calcGT(){if(!state.gridCenter)return 0;const uB=document.getElementById('chk-univ')?.checked?1.43:1;const cB=document.getElementById('chk-comp')?.checked?0.5:1;let t=0;
-  for(let i=0;i<16;i++){const s=state.cellStats[i],ou=getOU(i),sl=document.getElementById('chk-slope-'+i)?.checked?0.5:1;
-    if(s.mainPct>0)t+=ou*(s.mainPct/100)*1*sl*uB*cB;if(s.subPct>0)t+=ou*(s.subPct/100)*0.5*sl*uB*cB;}return Math.round(t);}
+function calcGT(){return calcGTraw();} // kept for compatibility
 function updateSales(){const tEl=document.getElementById('d_target');
   let txt=tEl?.textContent||'0';
   // "103*1.43\n=150명" 형태면 = 뒤의 숫자만, 아니면 전체에서 숫자 추출
@@ -274,24 +274,36 @@ function exportPPT(){if(!state.mapLoaded)return alert('지도를 먼저 불러�
   const tmp=document.createElement('canvas');tmp.width=cw;tmp.height=ch;const tc=tmp.getContext('2d');
   tc.save();tc.translate(state.mx,state.my);tc.scale(state.scale,state.scale);tc.drawImage(mapImg,0,0);tc.restore();tc.drawImage(cvs,0,0,cw,ch,0,0,cw,ch);
   const mapData=tmp.toDataURL('image/png');
-  const mxCm=0.75,myCm=1.5,availW=(pptW-tableW-mxCm-0.5)/2.54,availH=(pptH-myCm)/2.54;
+  const mxCm=0.75,myCm=1.5,availW=(pptW-tableW-mxCm-0.5)*0.9/2.54,availH=(pptH-myCm)*0.9/2.54;
   const ratio=cw/ch;let mw=availW,mh=mw/ratio;if(mh>availH){mh=availH;mw=mh*ratio;}
   slide.addImage({data:mapData,x:mxCm/2.54,y:myCm/2.54,w:mw,h:mh});
   // Table area
   const tmL=0.5/2.54,tmR=0.75/2.54;const rx=mw+mxCm/2.54+tmL;const rw=pptW/2.54-rx-tmR;
   // Title
-  slide.addText(d.addr,{x:rx,y:1/2.54,w:rw,h:.8,fontSize:18,bold:true,fontFace:'Malgun Gothic',color:'1e293b',valign:'top',wrap:true});
-  let ty=1/2.54+.85+.5/2.54;const fs=12,stH=.22,tGap=.12;
+  slide.addText(d.addr,{x:rx,y:myCm/2.54,w:rw,h:.8,fontSize:18,bold:true,fontFace:'Malgun Gothic',color:'1e293b',valign:'top',wrap:true});
+  let ty=myCm/2.54+.85+.5/2.54;const fs=12,stH=.22,tGap=.12;
   function sub(t){ty+=.08;slide.addText(t,{x:rx,y:ty,w:rw,h:stH,fontSize:12,bold:true,fontFace:'Malgun Gothic',color:'1e293b',valign:'bottom',wrap:false});ty+=stH;}
   function tbl(hdrs,data,hl){const cols=hdrs.length,cws=Array(cols).fill(rw/cols);
+    // 데이터에 줄바꿈 있으면 행 높이 키움
+    let dataRowH=.3;
+    data.forEach(row=>row.forEach(cell=>{if(String(cell||'').includes('\n'))dataRowH=.45;}));
     const rows=[hdrs.map(h=>({text:h,options:{bold:true,fill:'D9D9D9'}})),...data.map((row,ri)=>row.map((cell,ci)=>{
       const opt={};if(hl&&hl.some(h2=>h2[0]===ri&&h2[1]===ci))opt.highlight='FFFF00';return{text:String(cell||''),options:opt};}))];
     slide.addTable(rows,{x:rx,y:ty,w:rw,fontSize:fs,fontFace:'Malgun Gothic',border:{type:'solid',pt:.5,color:'000000'},colW:cws,align:'center',valign:'middle'});
-    ty+=.32*(rows.length)+.12;}
+    ty+=.28+dataRowH*data.length+.15;}
   sub('임차조건');tbl(['보증금','월세(관리비)','권리금'],[[d.deposit,d.rent,d.premium]]);
   sub('타겟수요');tbl(['배후수요','타겟비율','타겟수요(명)'],[[d.bg,d.ratio,d.target]],[[0,2]]);
   sub('타겟비율');tbl(['남20','남30','여20','여30','합계'],[[d.m20,d.m30,d.f20,d.f30,d.total]]);
-  sub('매출 및 IRR');tbl(['','예상매출액','직영','가맹'],[['평균',d.avgSales,d.avgDirect,d.avgFran],['상한',d.hiSales,d.hiDirect,d.hiFran],['하한',d.loSales,d.loDirect,d.loFran]],[[0,1],[0,2],[0,3]]);
+  sub('매출 및 IRR');
+  // 매출 표는 평균행 볼드 처리를 위해 직접 구성
+  const irrHdrs=[{text:'',options:{bold:true,fill:'D9D9D9'}},{text:'예상매출액',options:{bold:true,fill:'D9D9D9'}},{text:'직영',options:{bold:true,fill:'D9D9D9'}},{text:'가맹',options:{bold:true,fill:'D9D9D9'}}];
+  const irrData=[
+    [{text:'평균',options:{bold:true}},{text:String(d.avgSales||''),options:{bold:true,highlight:'FFFF00'}},{text:String(d.avgDirect||''),options:{bold:true,highlight:'FFFF00'}},{text:String(d.avgFran||''),options:{bold:true,highlight:'FFFF00'}}],
+    [{text:'상한'},{text:String(d.hiSales||'')},{text:String(d.hiDirect||'')},{text:String(d.hiFran||'')}],
+    [{text:'하한'},{text:String(d.loSales||'')},{text:String(d.loDirect||'')},{text:String(d.loFran||'')}]];
+  const irrRows=[irrHdrs,...irrData];const irrCws=[rw*0.15,rw*0.35,rw*0.25,rw*0.25];
+  slide.addTable(irrRows,{x:rx,y:ty,w:rw,fontSize:fs,fontFace:'Malgun Gothic',border:{type:'solid',pt:.5,color:'000000'},colW:irrCws,align:'center',valign:'middle'});
+  ty+=.28+.3*irrData.length+.15;
   pptx.writeFile({fileName:(d.addr||'분석')+'_'+new Date().toISOString().slice(0,10)+'.pptx'});}
 
 // Init
