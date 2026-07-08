@@ -235,10 +235,17 @@ function getData(){const g=id=>document.getElementById(id)?.value?.trim()??'';co
 function generatePreview(){const d=getData();const W=1200,H=675;previewCvs.width=W;previewCvs.height=H;previewCvs.style.width='100%';
   const px=W/33.867;const pCtx=previewCtx;pCtx.fillStyle='#fff';pCtx.fillRect(0,0,W,H);
   // Map
-  if(state.mapLoaded){const iw=mapImg.naturalWidth*state.scale,ih=mapImg.naturalHeight*state.scale;const cw=Math.min(iw,cvs.width),ch=Math.min(ih,cvs.height);
-    const tmp=document.createElement('canvas');tmp.width=cw;tmp.height=ch;const tc=tmp.getContext('2d');tc.save();tc.translate(state.mx,state.my);tc.scale(state.scale,state.scale);tc.drawImage(mapImg,0,0);tc.restore();tc.drawImage(cvs,0,0,cw,ch,0,0,cw,ch);
-    const maxW=(33.867-10.3-0.75-0.5)*px,maxH=(19.05-3)*px;const ratio=cw/ch;let dw=maxW,dh=dw/ratio;if(dh>maxH){dh=maxH;dw=dh*ratio;}
-    pCtx.drawImage(tmp,0.75*px,3*px,dw,dh);}
+  if(state.mapLoaded){
+    const imgW2=mapImg.naturalWidth*state.scale,imgH2=mapImg.naturalHeight*state.scale;
+    const vx=Math.max(0,state.mx),vy=Math.max(0,state.my);
+    const vr=Math.min(cvs.width,state.mx+imgW2),vb=Math.min(cvs.height,state.my+imgH2);
+    const cw2=vr-vx,ch2=vb-vy;
+    const tmp=document.createElement('canvas');tmp.width=cw2>0?cw2:cvs.width;tmp.height=ch2>0?ch2:cvs.height;const tc=tmp.getContext('2d');
+    tc.fillStyle='#ffffff';tc.fillRect(0,0,tmp.width,tmp.height);
+    tc.save();tc.translate(state.mx-vx,state.my-vy);tc.scale(state.scale,state.scale);tc.drawImage(mapImg,0,0);tc.restore();
+    tc.drawImage(cvs,vx,vy,tmp.width,tmp.height,0,0,tmp.width,tmp.height);
+    const maxW=(33.867-10.3-0.75-0.5)*px,maxH=(19.05-1.5)*px;const ratio2=tmp.width/tmp.height;let dw=maxW,dh=dw/ratio2;if(dh>maxH){dh=maxH;dw=dh*ratio2;}
+    pCtx.drawImage(tmp,0.75*px,1.5*px,dw,dh);}
   // Tables
   const rx=(33.867-10.3+0.5)*px,rw=(10.3-1)*px;let ty=1*px;
   pCtx.fillStyle='#1e293b';pCtx.font='bold 14px Malgun Gothic';pCtx.textAlign='left';pCtx.textBaseline='top';
@@ -269,13 +276,20 @@ function exportToGoogleSlide(){const url=document.getElementById('gslide-url')?.
 function exportPPT(){if(!state.mapLoaded)return alert('지도를 먼저 불러오세요');const d=getData();
   const pptW=33.867,pptH=19.05,tableW=10.3;const pptx=new PptxGenJS();
   pptx.defineLayout({name:'W',width:pptW/2.54,height:pptH/2.54});pptx.layout='W';const slide=pptx.addSlide();
-  // Map image (crop to actual image area)
-  const iw=mapImg.naturalWidth*state.scale,ih=mapImg.naturalHeight*state.scale;const cw=Math.min(iw,cvs.width),ch=Math.min(ih,cvs.height);
-  const tmp=document.createElement('canvas');tmp.width=cw;tmp.height=ch;const tc=tmp.getContext('2d');
-  tc.save();tc.translate(state.mx,state.my);tc.scale(state.scale,state.scale);tc.drawImage(mapImg,0,0);tc.restore();tc.drawImage(cvs,0,0,cw,ch,0,0,cw,ch);
+  // Map image (capture only the visible image area, not empty canvas)
+  const imgW=mapImg.naturalWidth*state.scale, imgH=mapImg.naturalHeight*state.scale;
+  // 이미지가 보이는 영역 계산 (캔버스 내에서 이미지가 차지하는 부분)
+  const visX=Math.max(0,state.mx), visY=Math.max(0,state.my);
+  const visR=Math.min(cvs.width, state.mx+imgW), visB=Math.min(cvs.height, state.my+imgH);
+  const capW=visR-visX, capH=visB-visY;
+  const tmp=document.createElement('canvas');tmp.width=capW>0?capW:cvs.width;tmp.height=capH>0?capH:cvs.height;const tc=tmp.getContext('2d');
+  tc.fillStyle='#ffffff';tc.fillRect(0,0,tmp.width,tmp.height);
+  tc.save();tc.translate(state.mx-visX,state.my-visY);tc.scale(state.scale,state.scale);tc.drawImage(mapImg,0,0);tc.restore();
+  // overlay (격자, 동선 등) — 같은 오프셋으로
+  tc.drawImage(cvs,visX,visY,tmp.width,tmp.height,0,0,tmp.width,tmp.height);
   const mapData=tmp.toDataURL('image/png');
   const mxCm=0.75,myCm=1.5,availW=(pptW-tableW-mxCm-0.5)*0.9/2.54,availH=(pptH-myCm)*0.9/2.54;
-  const ratio=cw/ch;let mw=availW,mh=mw/ratio;if(mh>availH){mh=availH;mw=mh*ratio;}
+  const ratio=tmp.width/tmp.height;let mw=availW,mh=mw/ratio;if(mh>availH){mh=availH;mw=mh*ratio;}
   slide.addImage({data:mapData,x:mxCm/2.54,y:myCm/2.54,w:mw,h:mh});
   // Table area
   const tmL=0.5/2.54,tmR=0.75/2.54;const rx=mw+mxCm/2.54+tmL;const rw=pptW/2.54-rx-tmR;
